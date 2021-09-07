@@ -1,21 +1,21 @@
 package main
 
 import (
-	"PriceGenerator/generator"
+	"PriceGenerator/internal/generator"
 	log "github.com/sirupsen/logrus"
 	"time"
 )
 
-func main(){
+func main() {
 
 	priceGenerator := generator.NewPriceGenerator()
 
-	for  {
+	for {
 		newPrice := priceGenerator.Generate()
 
 		log.Println(newPrice)
 
-		time.Sleep(time.Second*1)
+		time.Sleep(time.Second * 1)
 	}
 
 }
