@@ -3,75 +3,38 @@ package main
 import (
 	"PriceGenerator/internal/config"
 	"PriceGenerator/internal/generator"
-	"PriceGenerator/internal/models"
+	"PriceGenerator/internal/producer"
+	"PriceGenerator/internal/service"
 	"context"
-	"fmt"
-	"github.com/go-redis/redis/v8"
 	log "github.com/sirupsen/logrus"
-	"time"
+	"os"
+	"os/signal"
 )
 
-func getRedis(cfg *config.Config) *redis.Client {
-
-	client := redis.NewClient(&redis.Options{
-		Addr:     cfg.RedisAddres,
-		Password: cfg.RedisPassword,
-		Username: cfg.RedisUserName,
-		DB:       0,
-	})
-
-	res, err := client.Ping(context.Background()).Result()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(res)
-
-	return client
-}
-
 func main() {
-
 	cfg := config.NewConfig()
 
-	redisClient := getRedis(cfg)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := redisClient.Do(ctx, "DEL", "Prices").Err()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"handler": "main",
-			"action":  "clear redis db",
-		}).Errorf("unable to clear redis db %v", err)
-	}
-
+	priceProducer := producer.NewPriceProducer(cfg)
 	priceGenerator := generator.NewPriceGenerator()
 
-	//---------------cycle
-	ctx = context.Background()
+	priceService := service.NewPriceService(priceProducer, priceGenerator)
 
-	for {
-		batchOfPrices := make([]models.Price, 10)
-		for i := 0; i < 10; i++ {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
 
-			newPrice := priceGenerator.Generate()
-
-			batchOfPrices[i] = *newPrice
-
-			err = redisClient.Do(ctx, "XADD", "Prices", "*", "Id", newPrice.Id, "Name", newPrice.Name, "Bid", newPrice.Bid, "Ask", newPrice.Ask).Err()
-			if err != nil {
-				log.WithFields(log.Fields{
-					"handler": "main",
-					"action":  "Do",
-				}).Errorf("unablde to send %v", err)
-			}
-
-			fmt.Printf("New price: %v\n", newPrice)
+	go func() {
+		err := priceService.StartStream(ctx)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"handler": "main",
+				"action":  "start stream",
+			}).Errorf("unable to start stream %v", err.Error())
 		}
+	}()
 
-		time.Sleep(time.Second * 1)
-	}
-
+	<-c
+	cancel()
 }

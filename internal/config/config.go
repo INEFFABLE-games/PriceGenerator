@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Config structure for parse environment variables
 type Config struct {
 	RedisAddres   string `env:"REDISADDR,required,notEmpty"`
 	RedisPassword string `env:"REDISPASS,required,notEmpty"`
