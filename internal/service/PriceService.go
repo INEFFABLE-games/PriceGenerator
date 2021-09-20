@@ -15,6 +15,15 @@ type PriceService struct {
 	generator *generator.PriceGenerator
 }
 
+func contains(s []models.Price, e models.Price) bool {
+	for _, a := range s {
+		if a.Name == e.Name {
+			return true
+		}
+	}
+	return false
+}
+
 // StartStream is starts infinity cycle to send butches of prices in redis stream
 func (p *PriceService) StartStream(ctx context.Context) error {
 
@@ -26,17 +35,20 @@ func (p *PriceService) StartStream(ctx context.Context) error {
 		}).Errorf("unable to clear redis database %v", err.Error())
 	}
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case t := <-ticker.C:
-			var butchOfPrices = make([]models.Price, 10)
+			var butchOfPrices []models.Price
 
-			for i := 0; i < 10; i++ {
+			for i := 0; i < 20; i++ {
 				newPrice := p.generator.Generate()
-				butchOfPrices[i] = *newPrice
+				if contains(butchOfPrices, *newPrice) {
+					continue
+				}
+				butchOfPrices = append(butchOfPrices, *newPrice)
 			}
 
 			err := p.producer.SendBatchOfPrices(ctx, butchOfPrices)
